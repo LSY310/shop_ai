@@ -43,6 +43,35 @@ def search_and_recommend(user_query: str):
         return "현재 조건에 맞는 상품이 없습니다. 다른 스타일은 어떠신가요?"
     except Exception as e:
         return f"상품 추천 중 오류가 발생했습니다: {str(e)}"
+    
+def analyze_sales_report():
+    """쇼핑몰의 전체 매출 통계를 분석하여 총 매출액과 인기 상품 정보를 반환합니다."""
+    try:
+        conn = sqlite3.connect("shop.db")
+        cursor = conn.cursor()
+        
+        # 총 매출 계산
+        cursor.execute("SELECT SUM(price), COUNT(*) FROM orders")
+        total_sales, total_count = cursor.fetchone()
+        
+        # 가장 많이 팔린 상품 1위 조회
+        cursor.execute("""
+            SELECT product_name, COUNT(product_name) as cnt 
+            FROM orders 
+            GROUP BY product_name 
+            ORDER BY cnt DESC LIMIT 1
+        """)
+        top_product = cursor.fetchone()
+        
+        conn.close()
+        
+        return {
+            "total_revenue": total_sales,
+            "order_count": total_count,
+            "best_seller": top_product[0] if top_product else "없음"
+        }
+    except Exception as e:
+        return f"매출 분석 중 오류 발생: {str(e)}"
 
 # Gemini 모델 설정 시 전달할 도구 리스트
-tools_list = [get_order_status, search_and_recommend]
+tools_list = [get_order_status, search_and_recommend, analyze_sales_report]

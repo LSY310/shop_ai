@@ -9,14 +9,19 @@ def init_order_db(): # SQL 주문 DB 설정
             order_id TEXT PRIMARY KEY,
             user_name TEXT,
             product_name TEXT,
-            status TEXT
+            status TEXT,
+            price INTEGER,      
+            order_date TEXT     
         )
     """)
     orders = [
-        ('ORD001', '김철수', '여름용 린넨 셔츠', '배송 중'),
-        ('ORD002', '이영희', '고속 무선 충전기', '결제 완료')
+        ('ORD001', '김철수', '시원한 린넨 셔츠', '배송 중', 35000, '2026-04-01'),
+        ('ORD002', '이영희', '고속 무선 충전기', '결제 완료', 25000, '2026-04-10'),
+        ('ORD003', '박지민', '냉감 아이스 슬랙스', '배송 완료', 42000, '2026-04-15'),
+        ('ORD004', '최유리', '시원한 린넨 셔츠', '배송 중', 35000, '2026-04-16'),
+        ('ORD005', '정다은', '대용량 보냉 텀블러', '결제 완료', 22000, '2026-04-17')
     ]
-    cursor.executemany("INSERT OR REPLACE INTO orders VALUES (?,?,?,?)", orders)
+    cursor.executemany("INSERT OR REPLACE INTO orders VALUES (?,?,?,?,?,?)", orders)
     conn.commit()
     conn.close()
     print("주문 SQL DB 생성 완료!")
