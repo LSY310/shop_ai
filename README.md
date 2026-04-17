@@ -6,8 +6,8 @@
 
 ```bash
 curl "https://generativelanguage.googleapis.com/v1/models?key=YOUR_API_KEY"
-API 응답을 통해 정확한 모델 경로를 확인 후 코드에 적용하여 문제 해결
+API 응답을 통해 정확한 모델 경로를 확인 후 코드에 적용하여 문제 해결'''
 
--Google Gemini API는 모델 이름을 매우 엄격하게 검증함
--문서만 보는 것보다 실제 API 호출로 확인하는 것이 빠를 수 있음
--LLM 호출 구조 (API key → model → generate_content) 이해 완료
+Google Gemini API는 모델 이름을 매우 엄격하게 검증함
+문서만 보는 것보다 실제 API 호출로 확인하는 것이 빠를 수 있음
+LLM 호출 구조 (API key → model → generate_content) 이해 완료
