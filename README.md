@@ -14,7 +14,7 @@ curl "[https://generativelanguage.googleapis.com/v1/models?key=YOUR_API_KEY](htt
 #응답에서 확인한 정확한 모델명을 코드에 적용하여 해결
 ```
 
-###💡 배운 점
+### 💡 배운 점
 - 엄격한 모델 검증: Google Gemini API는 모델 ID(예: gemini-1.5-flash)가 정확해야만 작동함.
 - 직접 검증의 중요성: 때로는 문서보다 실제 API 응답을 확인하는 것이 가장 빠르고 확실함.
 - LLM 구조 이해: API Key → Model Selection → Generate Content로 이어지는 호출 흐름 파악 완료.
