@@ -1,5 +1,6 @@
 import sqlite3
 import chromadb
+import pandas as pd
 
 # ChromaDB 연결 (PersistentClient를 사용해야 database.py에서 만든 데이터를 가져옴)
 client = chromadb.PersistentClient(path="./chroma_db")
@@ -45,33 +46,39 @@ def search_and_recommend(user_query: str):
         return f"상품 추천 중 오류가 발생했습니다: {str(e)}"
     
 def analyze_sales_report():
-    """쇼핑몰의 전체 매출 통계를 분석하여 총 매출액과 인기 상품 정보를 반환합니다."""
+    """쇼핑몰의 전체 매출 통계를 분석하여 총 매출액, 판매 건수, 인기 상품 정보를 반환합니다."""
     try:
+        # DB 연결 및 데이터 로드
         conn = sqlite3.connect("shop.db")
-        cursor = conn.cursor()
-        
-        # 총 매출 계산
-        cursor.execute("SELECT SUM(price), COUNT(*) FROM orders")
-        total_sales, total_count = cursor.fetchone()
-        
-        # 가장 많이 팔린 상품 1위 조회
-        cursor.execute("""
-            SELECT product_name, COUNT(product_name) as cnt 
-            FROM orders 
-            GROUP BY product_name 
-            ORDER BY cnt DESC LIMIT 1
-        """)
-        top_product = cursor.fetchone()
-        
+        # SQL 데이터를 Pandas DataFrame으로 바로 변환
+        df = pd.read_sql_query("SELECT * FROM orders", conn)
         conn.close()
+
+        if df.empty:
+            return "현재 분석할 주문 데이터가 없습니다."
+
+        # 2. 데이터 가공 및 분석
+        df['price'] = pd.to_numeric(df['price']) # 가격 숫자 변환
+        total_revenue = df['price'].sum()        # 총 매출
+        total_count = len(df)                    # 총 판매 건수
         
-        return {
-            "total_revenue": total_sales,
-            "order_count": total_count,
-            "best_seller": top_product[0] if top_product else "없음"
+        # 상품별 판매량 집계 및 베스트셀러 추출
+        best_seller_series = df.groupby('product_name').size().sort_values(ascending=False)
+        best_seller_name = best_seller_series.index[0]
+        best_seller_count = best_seller_series.values[0]
+
+        # Gemini에게 전달할 리포트 구성 (이 데이터를 보고 Gemini가 해석함)
+        report = {
+            "total_revenue": f"{total_revenue:,}원",
+            "total_orders": f"{total_count}건",
+            "best_seller": f"{best_seller_name} ({best_seller_count}건 판매)",
+            "raw_data_summary": df[['product_name', 'price', 'order_date']].to_dict(orient='records')
         }
+        
+        return str(report) # Gemini가 읽기 좋게 문자열로 반환
+
     except Exception as e:
-        return f"매출 분석 중 오류 발생: {str(e)}"
+        return f"매출 분석 중 오류가 발생했습니다: {str(e)}"
 
 # Gemini 모델 설정 시 전달할 도구 리스트
 tools_list = [get_order_status, search_and_recommend, analyze_sales_report]
