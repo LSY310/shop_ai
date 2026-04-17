@@ -1,5 +1,4 @@
-📌 Day 1 - LLM 연동 및 챗봇 초기 구현
-## Day 1 - LLM 기반 쇼핑몰 챗봇 구현
+## 📌 Day 1 - LLM 기반 쇼핑몰 챗봇 구현
 
 - OpenAI API는 유료라 Google Gemini 모델 사용
 - 모델 이름 설정 문제로 초기 연동에서 오류 발생
