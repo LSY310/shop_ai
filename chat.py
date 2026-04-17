@@ -1,28 +1,21 @@
 import google.generativeai as genai
-from rag import load_data, retrieve
+from rag import init_vector_db, retrieve_with_embedding
 
 genai.configure(api_key="")
 
 model = genai.GenerativeModel("models/gemini-2.5-flash")
 
-# 데이터 로딩
-try:
-    docs = load_data()
-except Exception as e:
-    docs = []
-    print(f"데이터 로딩 실패: {e}")
+
+# 프로그램 시작 시 DB 초기화 (딱 한 번 실행)
+policy_db = init_vector_db("data.txt")
 
 
 def ask_llm(question):
     try:
-        # RAG 검색
-        context = retrieve(question, docs)
+        #임베딩 기반 검색 (의미적 검색)
+        context = retrieve_with_embedding(question, policy_db)
 
-        # context 비었을 때 처리
-        if not context.strip():
-            context = "관련된 정보가 없습니다."
-
-        # prompt 생성
+        #Prompt 구성
         prompt = f"""
         당신은 쇼핑몰 CS 전문가입니다. 아래 제공된 [참고 정보]만을 바탕으로 답변하세요.
         내용이 없으면 정중히 답변을 거절하세요.
@@ -33,7 +26,7 @@ def ask_llm(question):
         질문: {question}
         """
 
-        # API 호출
+        #Gemini 답변 생성
         response = model.generate_content(prompt)
 
         # response 검증
