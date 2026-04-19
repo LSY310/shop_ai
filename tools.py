@@ -27,9 +27,14 @@ def get_order_status(order_id: str):
         return f"주문 조회 중 오류가 발생했습니다: {str(e)}"
 
 def search_and_recommend(user_query: str):
+    
     """
-    사용자의 취향이나 요구사항(예: 여름에 입기 좋은 것, 노트북 보호 등)에 맞는 상품을 
-    벡터 데이터베이스에서 검색하여 추천합니다.
+    상품 추천 도구입니다.
+    
+    Args:
+        user_query (str): 사용자가 찾는 상품의 특징이나 취향 (예: '여름용 원피스', '가성비 좋은 노트북')
+    
+    사용자의 의도와 가장 일치하는 상품 데이터를 반환합니다. 질문(의도)과 직접적으로 관련 있는 상품만 골라서 추천 이유와 함께 설명하세요.
     """
     try:
         # 질문과 가장 유사한 상품 2개를 검색
@@ -48,7 +53,8 @@ def search_and_recommend(user_query: str):
         return f"상품 추천 중 오류가 발생했습니다: {str(e)}"
     
 def analyze_sales_report():
-    """쇼핑몰의 전체 매출 통계를 분석하여 총 매출액, 판매 건수, 인기 상품 정보를 반환합니다."""
+    """쇼핑몰의 전체 매출 데이터를 집계하고 분석합니다.
+    총 매출, 판매 건수, 베스트셀러 정보를 요약하여 반환합니다."""
     try:
         # DB 연결 및 데이터 로드
         conn = sqlite3.connect("shop.db")
@@ -59,7 +65,7 @@ def analyze_sales_report():
         if df.empty:
             return "현재 분석할 주문 데이터가 없습니다."
 
-        # 2. 데이터 가공 및 분석
+        # 데이터 가공 및 분석
         df['price'] = pd.to_numeric(df['price']) # 가격 숫자 변환
         total_revenue = df['price'].sum()        # 총 매출
         total_count = len(df)                    # 총 판매 건수
@@ -69,22 +75,32 @@ def analyze_sales_report():
         best_seller_name = best_seller_series.index[0]
         best_seller_count = best_seller_series.values[0]
 
+        # [개선] 전체 데이터를 보내는 대신 요약 정보와 최근 5건만 전송
+        # Gemini의 토큰 사용량을 줄이고 분석 집중도를 높임
+        recent_orders = df.tail(5).to_dict(orient='records')
+
         # Gemini에게 전달할 리포트 구성 (이 데이터를 보고 Gemini가 해석함)
-        report = {
-            "total_revenue": f"{total_revenue:,}원",
-            "total_orders": f"{total_count}건",
-            "best_seller": f"{best_seller_name} ({best_seller_count}건 판매)",
-            "raw_data_summary": df[['product_name', 'price', 'order_date']].to_dict(orient='records')
+        summary_report = {
+            "analysis_summary": {
+                "total_revenue": f"{total_revenue:,}원",
+                "total_orders": f"{total_count}건",
+                "best_seller": f"{best_seller_name} ({best_seller_count}건)",
+                "average_order_value": f"{int(total_revenue / total_count):,}원"
+            },
+            "recent_sample_data": recent_orders, # 최근 데이터 5건만 샘플로 전달
+            "note": "위 요약 수치를 바탕으로 현재 판매 흐름을 분석하고 경영 제언을 한 문장 추가하세요."
         }
         
-        return str(report) # Gemini가 읽기 좋게 문자열로 반환
+        return str(summary_report) # Gemini가 읽기 좋게 문자열로 반환
 
     except Exception as e:
         return f"매출 분석 중 오류가 발생했습니다: {str(e)}"
 
 def generate_smartstore_content(product_name, keywords, category, price):
+    
     """
     브랜드 톤앤매너가 적용된 네이버용 HTML 상세페이지와 SEO 정보를 생성합니다.
+    사용자가 생성된 결과물에 만족하면 'save_to_db' 도구를 사용하여 저장할 수 있습니다.
     """
     try:
         # 톤앤매너 추출을 위한 검색
@@ -94,20 +110,23 @@ def generate_smartstore_content(product_name, keywords, category, price):
         # Gemini가 이 형식을 지키도록 프롬프트 전달
         prompt = f"""
         당신은 네이버 스마트스토어 전문 카피라이터입니다. 
-        [샘플 말투]를 반영하여 신상품 콘텐츠를 작성하세요.
+        [샘플 말투]를 분석하여 브랜드 고유의 스타일이 느껴지는 신상품 콘텐츠를 작성하세요.
 
         [샘플 말투]
         {ref_text[:100]}
 
         [입력 정보]
-        상품명: {product_name} / 특징: {keywords} / 카테고리: {category} / 가격: {price}
+        - 상품명: {product_name}
+        - 핵심 특징: {keywords}
+        - 카테고리: {category}
+        - 판매가: {price}원
 
         [출력 요구사항]
-        1. 상품명: (25자 이내 SEO 최적화)
-        2. 상세설명: (<div>, <h3>, <p> 태그만 사용한 HTML. [이미지] 삽입 구간 포함)
-        3. 태그: (10개, 쉼표 구분)
-        
-        결과물은 반드시 '상품명:', '상세설명:', '태그:'로 구분해서 출력하세요.
+        1. 상품명: 키워드 반복을 피하고 클릭을 부르는 SEO 최적화 제목 (25자 이내)
+        2. 상세설명: <div>, <h3>, <p> 태그를 활용한 미려한 HTML 구조. 중간에 [상품 이미지 삽입] 위치를 표시할 것.
+        3. 태그: 검색 노출에 유리한 태그 10개를 쉼표로 구분.
+
+        주의: 반드시 지정된 형식(상품명:, 상세설명:, 태그:)을 엄격히 지켜 답변하세요.
         """
         return prompt
     except Exception as e:
@@ -146,6 +165,6 @@ tools_list = [
     search_and_recommend, 
     analyze_sales_report, 
     generate_smartstore_content, 
-    save_to_db,  # 저장을 위한 도구 추가
+    save_to_db,
     export_naver_excel
 ]
