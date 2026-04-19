@@ -1,6 +1,8 @@
 import sqlite3
 import chromadb
 import pandas as pd
+import datetime
+from database import save_generated_product, get_all_products_for_excel
 
 # ChromaDB 연결 (PersistentClient를 사용해야 database.py에서 만든 데이터를 가져옴)
 client = chromadb.PersistentClient(path="./chroma_db")
@@ -80,5 +82,70 @@ def analyze_sales_report():
     except Exception as e:
         return f"매출 분석 중 오류가 발생했습니다: {str(e)}"
 
-# Gemini 모델 설정 시 전달할 도구 리스트
-tools_list = [get_order_status, search_and_recommend, analyze_sales_report]
+def generate_smartstore_content(product_name, keywords, category, price):
+    """
+    브랜드 톤앤매너가 적용된 네이버용 HTML 상세페이지와 SEO 정보를 생성합니다.
+    """
+    try:
+        # 톤앤매너 추출을 위한 검색
+        results = product_collection.query(query_texts=[keywords], n_results=1)
+        ref_text = results['documents'][0][0] if results['documents'] else "깔끔하고 친절한 말투"
+
+        # Gemini가 이 형식을 지키도록 프롬프트 전달
+        prompt = f"""
+        당신은 네이버 스마트스토어 전문 카피라이터입니다. 
+        [샘플 말투]를 반영하여 신상품 콘텐츠를 작성하세요.
+
+        [샘플 말투]
+        {ref_text[:100]}
+
+        [입력 정보]
+        상품명: {product_name} / 특징: {keywords} / 카테고리: {category} / 가격: {price}
+
+        [출력 요구사항]
+        1. 상품명: (25자 이내 SEO 최적화)
+        2. 상세설명: (<div>, <h3>, <p> 태그만 사용한 HTML. [이미지] 삽입 구간 포함)
+        3. 태그: (10개, 쉼표 구분)
+        
+        결과물은 반드시 '상품명:', '상세설명:', '태그:'로 구분해서 출력하세요.
+        """
+        return prompt
+    except Exception as e:
+        return f"콘텐츠 생성 준비 중 오류: {str(e)}"
+
+def save_to_db(seo_title, html_desc, tags, price, category, original_name):
+    """AI가 만든 결과물을 DB에 최종 저장합니다."""
+    try:
+        data = {
+            'seo_title': seo_title,
+            'html_desc': html_desc,
+            'tags': tags,
+            'price': price,
+            'category': category,
+            'img_name': f"{original_name}.jpg" # 이미지 파일명 자동 생성
+        }
+        save_generated_product(data)
+        return "✅ 성공적으로 DB에 저장되었습니다."
+    except Exception as e:
+        return f"저장 중 오류: {str(e)}"
+
+def export_naver_excel():
+    """DB의 상품 데이터를 엑셀로 추출합니다."""
+    try:
+        df = get_all_products_for_excel()
+        if df.empty: return "추출할 데이터가 없습니다."
+        filename = f"naver_upload_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx"
+        df.to_excel(filename, index=False)
+        return f"✅ 엑셀 생성 완료: {filename}"
+    except Exception as e:
+        return f"엑셀 생성 중 오류: {str(e)}"
+
+# 도구 리스트 업데이트
+tools_list = [
+    get_order_status, 
+    search_and_recommend, 
+    analyze_sales_report, 
+    generate_smartstore_content, 
+    save_to_db,  # 저장을 위한 도구 추가
+    export_naver_excel
+]
