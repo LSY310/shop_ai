@@ -2,6 +2,8 @@ import sqlite3
 import chromadb
 import pandas as pd
 import datetime
+import requests
+import json
 from database import save_generated_product, get_all_products_for_excel
 
 # ChromaDB 연결 (PersistentClient를 사용해야 database.py에서 만든 데이터를 가져옴)
@@ -99,8 +101,8 @@ def analyze_sales_report():
 def generate_smartstore_content(product_name, keywords, category, price):
     
     """
-    브랜드 톤앤매너가 적용된 네이버용 HTML 상세페이지와 SEO 정보를 생성합니다.
-    사용자가 생성된 결과물에 만족하면 'save_to_db' 도구를 사용하여 저장할 수 있습니다.
+    브랜드 톤앤매너가 적용된 네이버용 HTML 상세페이지와 SEO 상품명, 태그를 생성합니다.
+    
     """
     try:
         # 톤앤매너 추출을 위한 검색
@@ -133,7 +135,7 @@ def generate_smartstore_content(product_name, keywords, category, price):
         return f"콘텐츠 생성 준비 중 오류: {str(e)}"
 
 def save_to_db(seo_title, html_desc, tags, price, category, original_name):
-    """AI가 만든 결과물을 DB에 최종 저장합니다."""
+    """AI가 만든 결과물을 DB에 최종 저장합니다.(엑셀 추출용)"""
     try:
         data = {
             'seo_title': seo_title,
@@ -148,6 +150,37 @@ def save_to_db(seo_title, html_desc, tags, price, category, original_name):
     except Exception as e:
         return f"저장 중 오류: {str(e)}"
 
+def register_to_internal_system(product_data_json: str):
+    """생성된 상품 정보를 내부 통합 관리 시스템(API)으로 즉시 전송합니다."""
+    # 1. 호출 확인 (이게 chat.py 터미널에 떠야 함)
+    print(f"\n[DEBUG] register_to_internal_system 함수 호출됨!")
+    print(f"[DEBUG] 전달받은 데이터: {product_data_json}")
+
+    try:
+        target_url = "http://127.0.0.1:8000/api/v1/internal/register"
+        
+        # 데이터 타입 체크 및 변환
+        if isinstance(product_data_json, str):
+            payload = json.loads(product_data_json)
+        else:
+            payload = product_data_json
+
+        # 2. 전송 시도
+        response = requests.post(target_url, json=payload, timeout=5)
+        
+        # 3. 결과 확인
+        print(f"[DEBUG] 서버 응답 상태코드: {response.status_code}")
+        
+        if response.status_code == 200:
+            return f"✅ 서버 전송 성공: {response.json()}"
+        else:
+            return f"❌ 서버 전송 실패: {response.text}"
+
+    except Exception as e:
+        # 에러 발생 시 로그 출력
+        print(f"[DEBUG] 전송 중 예외 발생: {str(e)}")
+        return f"⚠️ 연동 서버 연결 실패 (서버가 켜져 있는지 확인하세요)"
+        
 def export_naver_excel():
     """DB의 상품 데이터를 엑셀로 추출합니다."""
     try:
@@ -166,5 +199,19 @@ tools_list = [
     analyze_sales_report, 
     generate_smartstore_content, 
     save_to_db,
-    export_naver_excel
+    export_naver_excel,
+    register_to_internal_system
 ]
+
+if __name__ == "__main__":
+    print("🚀 [단독 테스트] 서버 전송을 시작합니다...")
+    # Gemini가 보냈을 법한 가상 데이터
+    dummy_data = {
+        "seo_title": "테스트용 냉감 팬츠",
+        "price": 25000,
+        "category": "의류"
+    }
+    # 함수 직접 호출
+    import json
+    result = register_to_internal_system(json.dumps(dummy_data))
+    print(f"결과: {result}")

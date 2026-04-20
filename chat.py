@@ -1,4 +1,3 @@
-# chat.py
 import google.generativeai as genai
 from tools import tools_list  # tools.py에서 리스트 가져오기
 from rag import init_vector_db, retrieve_with_embedding # 정책용 RAG
@@ -24,7 +23,8 @@ agent_model = genai.GenerativeModel(
 
 2. 상품 등록 및 DB 저장 (중요 워크플로우):
    - 사용자가 새로운 상품 정보를 주면 먼저 'generate_smartstore_content'를 호출해 마케팅 문구를 생성하세요.
-   - 생성된 콘텐츠를 사용자에게 보여준 뒤, 사용자가 "좋아", "저장해줘", "이대로 등록해" 등 긍정적인 반응을 보이면 즉시 'save_to_db' 도구를 호출하여 DB에 영구 저장하세요.
+   - 생성된 콘텐츠를 사용자에게 보여준 뒤, "이대로 DB에 저장하거나 내부 시스템으로 전송할까요?"라고 확인을 받으세요.
+   - 사용자가 승인하면 상황에 맞게 'save_to_db' 혹은 'register_to_internal_system'을 호출하세요.
 
 3. 상품 추천:
    - 'search_and_recommend'를 사용하되, 검색된 상품 중 사용자의 의도와 가장 밀치하는 상품을 골라 추천 사유와 함께 제안하세요.
