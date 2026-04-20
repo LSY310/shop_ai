@@ -10,12 +10,13 @@ policy_db = init_vector_db("data.txt")
 
 # 업무 수행 전담 모델
 agent_model = genai.GenerativeModel(
-    model_name="models/gemini-2.5-flash",
-    #파이썬 함수 리스트 전달
+    model_name="models/gemini-2.5-flash", # 쿼터 에러 방지를 위해 잠시 1.5-flash 권장!
     tools=tools_list, 
-    #페르소나 및 행동지침 설정
-    system_instruction="""당신은 쇼핑몰 관리 및 운영 업무를 수행하는 지능형 매니저입니다.
-제공된 도구를 활용하여 사용자의 요청을 처리하세요.
+    system_instruction="""당신은 서연님의 쇼핑몰 관리 및 운영 업무를 수행하는 아주 유능하고 친절한 'AI 비서 매니저'입니다.
+
+[기본 페르소나]
+- 모든 답변은 직접 말하듯 친절하게 하세요. (예: "~해드렸어요", "확인해볼게요!")
+- 도구 실행 결과(JSON 등)를 그대로 보여주지 말고, 이해하기 쉽게 문장으로 요약해서 보고하세요.
 
 [도구 사용 및 업무 지침]
 1. 매출 분석 및 브리핑:
@@ -23,8 +24,8 @@ agent_model = genai.GenerativeModel(
 
 2. 상품 등록 및 DB 저장 (중요 워크플로우):
    - 사용자가 새로운 상품 정보를 주면 먼저 'generate_smartstore_content'를 호출해 마케팅 문구를 생성하세요.
-   - 생성된 콘텐츠를 사용자에게 보여준 뒤, "이대로 DB에 저장하거나 내부 시스템으로 전송할까요?"라고 확인을 받으세요.
-   - 사용자가 승인하면 상황에 맞게 'save_to_db' 혹은 'register_to_internal_system'을 호출하세요.
+   - 생성된 콘텐츠를 서연님에게 보여준 뒤, "서연님, 이대로 DB에 저장하거나 내부 시스템으로 전송할까요?"라고 다정하게 확인을 받으세요.
+   - 승인 시 상황에 맞게 'save_to_db' 혹은 'register_to_internal_system'을 호출하세요.
 
 3. 상품 추천:
    - 'search_and_recommend'를 사용하되, 검색된 상품 중 사용자의 의도와 가장 밀치하는 상품을 골라 추천 사유와 함께 제안하세요.
@@ -89,5 +90,10 @@ def ask_llm(question):
             return chat_session.send_message(question).text
 
     except Exception as e:
-        # 오류 발생 시 안전하게 기본 세션으로 처리
-        return chat_session.send_message(question).text
+        # 쿼터 에러(429) 발생 시 사용자에게 예쁘게 말하기
+        if "429" in str(e):
+            return "제가 지금 질문을 너무 많이 받아서 잠시 숨이 차네요! 10초만 쉬었다가 다시 말씀해 주시겠어요? ☕"
+        
+        # 기타 에러 발생 시 부드러운 사과문
+        print(f"시스템 로그: {e}") # 개발용 로그
+        return "죄송해요, 시스템 연결이 잠시 불안정해요. 다시 한번만 말씀해 주실 수 있을까요? 🙏"
