@@ -1,5 +1,5 @@
 import google.generativeai as genai
-from tools import tools_list  # tools.py에서 리스트 가져오기
+from tools import tools_list, extract_order_number  # tools.py에서 리스트 가져오기
 from rag import init_vector_db, retrieve_with_embedding # 정책용 RAG
 import json
 
@@ -45,14 +45,18 @@ chat_session = agent_model.start_chat(enable_automatic_function_calling=True)
 
 # 질문 분류기 (Router) 프롬프트
 ROUTER_PROMPT = """
-당신은 쇼핑몰 관리 시스템의 분류 전문가입니다. 
-사용자의 질문을 분석하여 가장 적절한 카테고리를 하나 선택해 JSON으로 응답하세요.
+당신은 사용자의 질문에서 의도와 주요 정보를 추출하는 라우터입니다.
+결과는 반드시 JSON 형식으로만 답변하세요.
 
-[분류 기준]
+[의도 분류]
 1. POLICY: 쇼핑몰의 운영 원칙, 배송비, 환불 규정, 위치/주차 안내 등 '문서화된 정보'를 찾는 질문
 2. ACTION: 실시간 데이터 조작이나 계산이 필요한 모든 경우. 
    - 예: 주문/배송 상태 조회, 매출 통계 분석, 상품 추천, 콘텐츠 생성 및 DB 저장, 엑셀 파일 출력 등
 3. GENERAL: 단순 인사, 시스템 사용법 문의, 혹은 분류하기 어려운 일상 대화
+
+[추출 정보]
+- order_number: '20260420-001'과 같은 형식의 번호가 있으면 추출(없으면 null)
+- product_name: 언급된 상품명이 있으면 추출(없으면 null)
 
 [주의 사항]
 - 질문에 정책 문의와 기능 실행이 섞여 있는 복합 질문의 경우, 반드시 'ACTION'으로 분류하세요.
@@ -63,18 +67,30 @@ ROUTER_PROMPT = """
 # 대화 실행 루프
 def ask_llm(question):
     try:
+        # 하이브리드 추출: 정규식으로 먼저 주문번호 확인
+        regex_order = extract_order_number(question)
+
         # 라우터가 질문의 의도를 1차 파악
         route_response = router_model.generate_content(f"{ROUTER_PROMPT}\n질문: {question}")
         # JSON 형태만 쏙 뽑아내기 위해 replace와 strip 사용
         #프로그램이 if문으로 분기 처리를 하려면 텍스트보다는 구조화된 데이터(JSON)가 훨씬 정확하기 때문에 json 사용
         route_data = json.loads(route_response.text.replace("```json", "").replace("```", "").strip())
-        category = route_data.get("category")
+        category = regex_order or route_data.get("category")
+
+        # 라우터가 놓쳐도 정규식이 찾았다면 보완 (Hybrid)
+        order_number = regex_order or route_data.get("order_number")
+
+        # 에이전트가 문맥을 놓치지 않게 명시적으로 정보를 주입
+        refined_question = question
+
+        if order_number:
+            refined_question = f"[시스템 안내: 주문번호 {order_number} 관련 요청임] {question}"
 
         # 쇼핑몰 운영 정책 (RAG 전용)
         if category == "POLICY":
             # Gemini에게 정책 문서 내용을 주입하며 답변 유도
             context = retrieve_with_embedding(question, policy_db)
-            prompt = f"당신은 CS 담당자입니다. 아래 지침을 참고해 답변하세요.\n지침: {context}\n질문: {question}"
+            prompt = f"당신은 CS 담당자입니다. 아래 지침을 참고해 답변하세요.\n지침: {context}\n질문:{refined_question}"
             return agent_model.generate_content(prompt).text
 
         # 시스템 기능 실행 (Function Calling 전용)

@@ -4,6 +4,7 @@ import pandas as pd
 import datetime
 import requests
 import json
+import re
 from database import save_generated_product, get_all_products_for_excel
 
 # ChromaDB 연결 (PersistentClient를 사용해야 database.py에서 만든 데이터를 가져옴)
@@ -191,6 +192,18 @@ def export_naver_excel():
         return f"✅ 엑셀 생성 완료: {filename}"
     except Exception as e:
         return f"엑셀 생성 중 오류: {str(e)}"
+    
+def extract_order_number(text):
+    """
+    사용자 입력에서 주문번호 패턴(예: 20260420-001 또는 8자리 숫자 등)을 추출합니다.
+    """
+    # 주문번호 패턴이 8자리 숫자 - 3자리 숫자라고 가정
+
+    pattern = r'\d{8}-\d{3,4}' 
+    match = re.search(pattern, text)
+    if match:
+        return match.group()
+    return None
 
 # 도구 리스트 업데이트
 tools_list = [
@@ -200,7 +213,8 @@ tools_list = [
     generate_smartstore_content, 
     save_to_db,
     export_naver_excel,
-    register_to_internal_system
+    register_to_internal_system,
+    extract_order_number
 ]
 
 if __name__ == "__main__":
