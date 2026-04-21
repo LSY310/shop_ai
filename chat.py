@@ -2,6 +2,7 @@ import google.generativeai as genai
 from tools import tools_list, extract_order_number  # tools.py에서 리스트 가져오기
 from rag import init_vector_db, retrieve_with_embedding # 정책용 RAG
 import json
+from database import save_chat_log
 
 genai.configure(api_key="")
 
@@ -66,6 +67,12 @@ ROUTER_PROMPT = """
 
 # 대화 실행 루프
 def ask_llm(question):
+    # 로그에 기록할 변수들 초기화
+    category = "UNKNOWN"
+    refined_question = question
+    full_response = ""
+    is_error = 0
+
     try:
         # 하이브리드 추출: 정규식으로 먼저 주문번호 확인
         regex_order = extract_order_number(question)
@@ -104,8 +111,16 @@ def ask_llm(question):
         # [경로 C] 일반 대화
         else:
             return chat_session.send_message(question).text
+        
+        # [성공 로그 저장]
+        save_chat_log(question, category, full_response, refined_question, is_error=0)
+        return full_response
 
     except Exception as e:
+
+        is_error = 1
+        error_msg = str(e)
+        
         # 쿼터 에러(429) 발생 시 사용자에게 예쁘게 말하기
         if "429" in str(e):
             return "제가 지금 질문을 너무 많이 받아서 잠시 숨이 차네요! 10초만 쉬었다가 다시 말씀해 주시겠어요? ☕"

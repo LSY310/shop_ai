@@ -2,6 +2,7 @@ import sqlite3
 import chromadb
 import pandas as pd
 import os
+from datetime import datetime
 
 db_name = "shop.db"
 
@@ -33,6 +34,21 @@ def init_all_databases():
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # 대화 로그 테이블
+    # 유저 질문, AI 응답, 의도 분류, 보강된 질문, 에러 여부 등을 기록
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            user_question TEXT,
+            ai_category TEXT,
+            ai_response TEXT,
+            refined_query TEXT,
+            is_error INTEGER DEFAULT 0
+        )
+    """)
+
     # 테스트용 주문 데이터 삽입
     # 분석 시나리오: '린넨 셔츠'가 베스트셀러, 최근 며칠간 매출 발생
     sample_orders = [
@@ -54,6 +70,18 @@ def init_all_databases():
     """, sample_orders)
 
     print(f"✅ SQLite: {len(sample_orders)}개의 주문 데이터가 삽입되었습니다.")
+    conn.commit()
+    conn.close()
+
+# 로그 저장 전용 함수
+def save_chat_log(question, category, response, refined_query, is_error=0):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    cursor.execute("""
+        INSERT INTO chat_logs (timestamp, user_question, ai_category, ai_response, refined_query, is_error)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (timestamp, question, category, response, refined_query, is_error))
     conn.commit()
     conn.close()
 
