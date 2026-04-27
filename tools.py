@@ -9,11 +9,11 @@ from database import save_generated_product, get_all_products_for_excel
 
 # ChromaDB 연결 (PersistentClient를 사용해야 database.py에서 만든 데이터를 가져옴)
 client = chromadb.PersistentClient(path="./chroma_db")
-product_collection = client.get_collection(name="products")
+product_collection = client.get_or_create_collection(name="products")
 
 def get_order_status(order_id: str):
     """
-    사용자의 주문 번호(예: ORD001)를 통해 현재 배송 상태를 조회합니다.
+    사용자의 주문 번호(예: 20260420-001)를 통해 현재 배송 상태를 조회합니다.
     """
     try:
         conn = sqlite3.connect("shop.db")
@@ -56,45 +56,59 @@ def search_and_recommend(user_query: str):
         return f"상품 추천 중 오류가 발생했습니다: {str(e)}"
     
 def analyze_sales_report():
-    """쇼핑몰의 전체 매출 데이터를 집계하고 분석합니다.
-    총 매출, 판매 건수, 베스트셀러 정보를 요약하여 반환합니다."""
+    """
+    daily_summary(ETL 결과)를 우선 분석하고, 데이터가 없을 경우에만 실시간 orders 테이블을 직접 분석합니다.
+    """
     try:
-        # DB 연결 및 데이터 로드
         conn = sqlite3.connect("shop.db")
-        # SQL 데이터를 Pandas DataFrame으로 바로 변환
+        
+        # Airflow가 생성한 daily_summary 테이블 조회
+        # 가장 최근 날짜의 요약본 1건을 가져옵니다.
+        summary_df = pd.read_sql_query("SELECT * FROM daily_summary ORDER BY date DESC LIMIT 1", conn)
+        
+        if not summary_df.empty:
+            row = summary_df.iloc[0]
+            report = {
+                "source": "ETL_DAILY_SUMMARY",
+                "date": row['date'],
+                "analysis_summary": {
+                    "total_revenue": f"{row['total_sales']:,}원",
+                    "total_orders": f"{row['order_count']}건",
+                    "best_seller": row['top_product'],
+                    "average_order_value": f"{row['avg_order_value']:,}원"
+                },
+                "note": "위 요약 수치는 배치(Batch) 처리된 결과입니다. 이를 바탕으로 인사이트를 제시하세요."
+            }
+            conn.close()
+            return str(report)
+
+        # 예외 상황: 요약 테이블이 비어있을 경우 실시간 분석 수행 
         df = pd.read_sql_query("SELECT * FROM orders", conn)
         conn.close()
 
         if df.empty:
             return "현재 분석할 주문 데이터가 없습니다."
 
-        # 데이터 가공 및 분석
-        df['price'] = pd.to_numeric(df['price']) # 가격 숫자 변환
-        total_revenue = df['price'].sum()        # 총 매출
-        total_count = len(df)                    # 총 판매 건수
-        
-        # 상품별 판매량 집계 및 베스트셀러 추출
+        df['price'] = pd.to_numeric(df['price'])
+        total_revenue = df['price'].sum()
+        total_count = len(df)
         best_seller_series = df.groupby('product_name').size().sort_values(ascending=False)
         best_seller_name = best_seller_series.index[0]
-        best_seller_count = best_seller_series.values[0]
-
-        # [개선] 전체 데이터를 보내는 대신 요약 정보와 최근 5건만 전송
-        # Gemini의 토큰 사용량을 줄이고 분석 집중도를 높임
+        
         recent_orders = df.tail(5).to_dict(orient='records')
 
-        # Gemini에게 전달할 리포트 구성 (이 데이터를 보고 Gemini가 해석함)
         summary_report = {
+            "source": "REAL_TIME_ANALYSIS",
             "analysis_summary": {
                 "total_revenue": f"{total_revenue:,}원",
                 "total_orders": f"{total_count}건",
-                "best_seller": f"{best_seller_name} ({best_seller_count}건)",
+                "best_seller": best_seller_name,
                 "average_order_value": f"{int(total_revenue / total_count):,}원"
             },
-            "recent_sample_data": recent_orders, # 최근 데이터 5건만 샘플로 전달
-            "note": "위 요약 수치를 바탕으로 현재 판매 흐름을 분석하고 경영 제언을 한 문장 추가하세요."
+            "recent_sample_data": recent_orders,
+            "note": "실시간 데이터를 기반으로 분석한 결과입니다. 경영 제언을 한 문장 추가하세요."
         }
-        
-        return str(summary_report) # Gemini가 읽기 좋게 문자열로 반환
+        return str(summary_report)
 
     except Exception as e:
         return f"매출 분석 중 오류가 발생했습니다: {str(e)}"

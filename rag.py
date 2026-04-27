@@ -28,7 +28,7 @@ def init_vector_db(file_path="data.txt"):# 벡터 DB 초기화 및 데이터 로
         )
     return collection
 
-def retrieve_with_embedding(query, collection): # 질문과 가장 유사한 문장 찾아오기
+def retrieve_hybrid(query, collection, n_results=2): # 질문과 가장 유사한 문장 찾아오기
     # 질문을 임베딩 (숫자로 변환)
     query_embedding = genai.embed_content(
         model="gemini-embedding-001",
@@ -36,11 +36,25 @@ def retrieve_with_embedding(query, collection): # 질문과 가장 유사한 문
         task_type="retrieval_query" # 질문을 던질 때
     )['embedding']
     
-    # DB에서 가장 유사한 2개 문장 검색
+    # 벡터 DB에서 후보군 검색
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=2
+        n_results=n_results * 2 # 재정렬을 위해 2배수 뽑음
     )
+    documents = results['documents'][0]
     
-    # 검색된 문장들을 하나로 합쳐서 반환
-    return "\n".join(results['documents'][0])
+    # Re-Ranking: 키워드 가중치 부여 (할루시네이션 방지 핵심)
+    keywords = query.split()
+    scored_results = []
+
+    for doc in documents:
+        # 질문에 포함된 단어가 실제 문서에 직접 들어있는지 체크
+        keyword_score = sum(1 for word in keywords if word in doc)
+        scored_results.append((keyword_score, doc))
+
+    # 키워드 점수 높은 순으로 재정렬
+    scored_results.sort(key=lambda x: x[0], reverse=True)
+
+    # 최종적으로 필요한 n_results만큼만 반환
+    final_context = "\n".join([r[1] for r in scored_results[:n_results]])
+    return final_context

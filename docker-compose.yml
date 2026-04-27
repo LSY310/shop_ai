@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  shop-ai:
+    build: .
+    container_name: shop_manager_system
+    ports:
+      - "8501:8501"  # Streamlit 접속 포트 개방
+    volumes:
+      - .:/app
+    environment:
+      - TZ=Asia/Seoul
+    # command를 streamlit 실행으로 변경
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0

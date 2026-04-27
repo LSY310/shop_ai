@@ -1,0 +1,6 @@
+pandas
+chromadb
+schedule
+google-generativeai
+streamlit
+plotly

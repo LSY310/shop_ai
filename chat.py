@@ -1,6 +1,6 @@
 import google.generativeai as genai
 from tools import tools_list, extract_order_number  # tools.py에서 리스트 가져오기
-from rag import init_vector_db, retrieve_with_embedding # 정책용 RAG
+from rag import init_vector_db, retrieve_hybrid # 정책용 RAG
 import json
 from database import save_chat_log
 from functools import lru_cache
@@ -22,18 +22,19 @@ agent_model = genai.GenerativeModel(
 
 [도구 사용 및 업무 지침]
 1. 매출 분석 및 브리핑:
-   - 'analyze_sales_report'를 호출하여 통계 데이터를 가져오고, 이를 바탕으로 현재 판매 상황과 향후 경영 제언을 한 문장 포함하여 설명하세요.
+   - 'analyze_sales_report'를 호출하세요. (ETL 요약 데이터가 있으면 우선 활용됩니다)
+   - 통계 데이터를 바탕으로 현재 판매 상황과 경영 제언을 다정하게 설명하세요.
 
 2. 상품 등록 및 DB 저장 (중요 워크플로우):
    - 사용자가 새로운 상품 정보를 주면 먼저 'generate_smartstore_content'를 호출해 마케팅 문구를 생성하세요.
-   - 생성된 콘텐츠를 서연님에게 보여준 뒤, "서연님, 이대로 DB에 저장하거나 내부 시스템으로 전송할까요?"라고 다정하게 확인을 받으세요.
+   - 생성된 콘텐츠를 서연님에게 보여준 뒤, "서연님, 이대로 DB에 저장하거나 내부 시스템으로 전송할까요?"라고 확인을 받으세요.
    - 승인 시 상황에 맞게 'save_to_db' 혹은 'register_to_internal_system'을 호출하세요.
 
 3. 상품 추천:
-   - 'search_and_recommend'를 사용하되, 검색된 상품 중 사용자의 의도와 가장 밀치하는 상품을 골라 추천 사유와 함께 제안하세요.
+   - 'search_and_recommend'를 사용하되, 검색된 상품 중 사용자의 의도와 가장 일치하는 상품을 골라 추천 사유와 함께 제안하세요.
 
 4. 엑셀 출력:
-   - 모든 데이터 처리가 완료되거나 사용자가 업로용 파일을 요청하면 'export_naver_excel'을 호출하세요.
+   - 모든 데이터 처리가 완료되거나 사용자가 업로드용 파일을 요청하면 'export_naver_excel'을 호출하세요.
 
 친절하고 전문적인 어조를 유지하며, 불필요한 도구 호출은 지양하세요."""
 )
@@ -110,13 +111,16 @@ def ask_llm(question):
 
         if order_number:
             refined_question = f"[시스템 안내: 주문번호 {order_number} 관련 요청임] {question}"
-
+        else:
+            refined_question = question
+        
+        #카테고리별 분기 처리
         # 쇼핑몰 운영 정책 (RAG 전용)
         if category == "POLICY":
-            # Gemini에게 정책 문서 내용을 주입하며 답변 유도
-            context = retrieve_with_embedding(question, policy_db)
+            # retrieve_hybrid 함수를 통해 벡터+키워드 검색 수행
+            context = retrieve_hybrid(question, policy_db, n_results=2)
             full_response = get_cached_policy_response(question, context)
-
+            
         # 시스템 기능 실행 (Function Calling 전용)
         # 여기서 analyze_sales_report, generate_smartstore_content 등이 실행됩니다.
         elif category == "ACTION":

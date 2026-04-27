@@ -49,19 +49,30 @@ def init_all_databases():
         )
     """)
 
+    # 분석용 일일 요약 테이블 (Airflow ETL 결과 저장용)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS daily_summary (
+            date TEXT PRIMARY KEY,
+            total_sales INTEGER,
+            order_count INTEGER,
+            avg_order_value INTEGER,
+            top_product TEXT
+        )
+    """)
+
     # 테스트용 주문 데이터 삽입
     # 분석 시나리오: '린넨 셔츠'가 베스트셀러, 최근 며칠간 매출 발생
     sample_orders = [
         ("20260420-001", "김철수", "시원한 린넨 셔츠", "배송완료", 35000, "2026-04-10"),
         ("20260420-002", "이영희", "냉감 아이스 슬랙스", "배송중", 42000, "2026-04-12"),
         ("20260420-003", "박민준", "시원한 린넨 셔츠", "배송완료", 35000, "2026-04-15"),
-        ("20260420-004", "최지우", "기본 오버핏 반팔", "결제완료", 19000, "2026-04-16"),
-        ("20260420-005", "정다은", "시원한 린넨 셔츠", "배송중", 35000, "2026-04-17"),
-        ("20260420-006", "강현우", "냉감 아이스 슬랙스", "배송완료", 42000, "2026-04-18"),
-        ("20260420-007", "윤서연", "여름용 버킷햇", "결제완료", 25000, "2026-04-18"),
-        ("20260420-008", "임세영", "시원한 린넨 셔츠", "배송준비", 35000, "2026-04-19"),
-        ("20260420-009", "한승범", "기본 오버핏 반팔", "배송완료", 19000, "2026-04-19"),
-        ("20260420-010", "송재희", "냉감 아이스 슬랙스", "취소", 42000, "2026-04-19"),
+        ("20260421-004", "최지우", "기본 오버핏 반팔", "결제완료", 19000, "2026-04-16"),
+        ("20260421-005", "정다은", "시원한 린넨 셔츠", "배송중", 35000, "2026-04-17"),
+        ("20260421-006", "강현우", "냉감 아이스 슬랙스", "배송완료", 42000, "2026-04-18"),
+        ("20260422-007", "윤서연", "여름용 버킷햇", "결제완료", 25000, "2026-04-18"),
+        ("20260422-008", "임세영", "시원한 린넨 셔츠", "배송준비", 35000, "2026-04-19"),
+        ("20260422-009", "한승범", "기본 오버핏 반팔", "배송완료", 19000, "2026-04-19"),
+        ("20260422-010", "송재희", "냉감 아이스 슬랙스", "취소", 42000, "2026-04-19"),
     ]
 
     cursor.executemany("""
@@ -71,6 +82,25 @@ def init_all_databases():
 
     print(f"✅ SQLite: {len(sample_orders)}개의 주문 데이터가 삽입되었습니다.")
     conn.commit()
+    conn.close()
+
+#  ETL 파이프라인 함수 (Airflow에서 호출하거나 별도 스케줄러로 실행)
+def run_daily_sales_etl():
+    conn = sqlite3.connect("shop.db")
+    # 어제 날짜 데이터 집계
+    yesterday = (datetime.now()).strftime('%Y-%m-%d') 
+    df = pd.read_sql(f"SELECT * FROM orders WHERE order_date LIKE '{yesterday}%'", conn)
+    
+    if not df.empty:
+        summary = {
+            'date': yesterday,
+            'total_sales': int(df['price'].sum()),
+            'order_count': len(df),
+            'avg_order_value': int(df['price'].mean()),
+            'top_product': df.groupby('product_name')['order_id'].count().idxmax()
+        }
+        summary_df = pd.DataFrame([summary])
+        summary_df.to_sql('daily_summary', conn, if_exists='append', index=False)
     conn.close()
 
 # 로그 저장 전용 함수
@@ -114,6 +144,11 @@ def init_vector_db():
     ]
     for p in samples:
         collection.add(ids=[p['id']], documents=[f"상품명: {p['name']}\n설명: {p['desc']}"], metadatas={"name":p['name']})
+
+def task():
+    print(f"[{datetime.now()}] 일일 매출 집계 시작...")
+    run_daily_sales_etl()
+    print("✅ 집계 완료")
 
 if __name__ == "__main__":
     init_all_databases()
